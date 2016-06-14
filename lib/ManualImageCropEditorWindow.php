@@ -37,9 +37,9 @@ class ManualImageCropEditorWindow {
 		$imageSizes = get_intermediate_image_sizes();
 
 		$editedSize = in_array($_GET['size'], $imageSizes) ? $_GET['size'] : null;
-			
+
 		$postId = filter_var($_GET['postId'], FILTER_SANITIZE_NUMBER_INT);
-		
+
 		$sizeLabels = apply_filters( 'image_size_names_choose', array(
 				'thumbnail' => __('Thumbnail'),
 				'medium'    => __('Medium'),
@@ -105,8 +105,8 @@ class ManualImageCropEditorWindow {
 		$src_file = str_replace($uploadsDir['baseurl'], $uploadsDir['basedir'], $src_file_url[0]);
 		$sizes = getimagesize($src_file);
 
-		$original[0] = $sizes[0];
-		$original[1] = $sizes[1];
+		$original[0] = $sizes[0];  // width
+		$original[1] = $sizes[1];  // height
 
 		if ($width > $sizes[0]) {
 			$sizes[1] = ( $sizes[1] * ($width / $sizes[0]) );
@@ -168,9 +168,9 @@ class ManualImageCropEditorWindow {
 			<?php _e('Target picture dimensions:','microp') ?>
 			<strong> <?php // ($width != $width2 or $height != $height2) echo $width.' x '.$height.' px ('.$width2.' x '.$height2.' px)';
 		//else
-                    echo $width.' x '.$height.' px'; ?>
+                    echo '<input type="number" name="width" class="dimensions-width" value="'. $width . '" /> x <input type="number" name="height" class="dimensions-height" value="' . $height . '"/> px'; ?>
 			</strong> (
-			<?php if ($cropMethod == 0) { 
+			<?php if ($cropMethod == 0) {
 				_e('Soft proportional crop mode','microp');
 			}else { _e('Hard crop mode','microp');
 } ?>
@@ -180,7 +180,7 @@ class ManualImageCropEditorWindow {
 		<div class="mic-52-col">
 			<?php _e('New image:','microp') ?>
 			<br />
-			<div style="width: <?php echo $smallPreviewWidth; ?>px; height: <?php echo $smallPreviewHeight; ?>px; overflow: hidden; margin-left: 5px; float: right;">
+			<div class="preview-viewbox" style="width: <?php echo $smallPreviewWidth; ?>px; height: <?php echo $smallPreviewHeight; ?>px; overflow: hidden; margin-left: 5px; float: center;">
 				<img id="preview"
 					src="<?php echo wp_get_attachment_url($postId); ?>">
 			</div>
@@ -201,7 +201,7 @@ class ManualImageCropEditorWindow {
 			id="micLoading" />
 
 
-		<?php 
+		<?php
 		$ext = strtolower( pathinfo($src_file, PATHINFO_EXTENSION) );
 		if ($ext == 'jpg' || $ext == 'jpeg') {
 			echo '<div class="mic-option"><label for="micQuality">' . __('Target JPEG Quality', 'microp') . '</label> <select id="micQuality" name="mic_quality">
@@ -215,7 +215,7 @@ class ManualImageCropEditorWindow {
 			</select></div>';
 		}
 		?>
-		<?php 
+		<?php
                 if ( is_plugin_active('wp-retina-2x/wp-retina-2x.php') ) { ?>
 		<div class="mic-option">
 			<input type="checkbox" id="mic-make-2x"
@@ -223,7 +223,7 @@ class ManualImageCropEditorWindow {
 			<label for="mic-make-2x"><?php _e('Generate Retina/HiDPI (@2x):', 'microp') ?>
 				<span id="mic-2x-status"></span> </label>
 		</div>
-		<?php 
+		<?php
 	            } ?>
 
 		<div id="micSuccessMessage" class="updated below-h2">
@@ -241,11 +241,32 @@ class ManualImageCropEditorWindow {
 			mic_attachment_id = <?php echo $postId; ?>;
 			mic_edited_size = '<?php echo $editedSize; ?>';
 			mic_preview_scale = <?php echo $previewRatio; ?>;
-			
+			console.log(mic_preview_scale);
 			$('#mic-make-2x').change(function() {$('#mic-2x-status').toggle()});
-			
-			
-			setTimeout(function() { 
+
+			// On change of aspect ratio
+			$('.dimensions-width, .dimensions-height').change(function(){
+				new_width = $('.dimensions-width').val();
+				new_height = $('.dimensions-height').val();
+
+				// Update jcrop aspect ratio
+				$('#jcrop_target').Jcrop({
+					onChange: showPreview,
+					onSelect: showPreview,
+					aspectRatio: new_width / new_height,
+				}, function() {
+					jcrop_api = this;
+				});
+
+				// Update preview box.
+				$('#preview').css({
+					width: new_width + 'px',
+					height: new_height + 'px',
+				});
+
+			})
+
+			setTimeout(function() {
 				$('#jcrop_target').Jcrop({
 					onChange: showPreview,
 					onSelect: showPreview,
@@ -263,16 +284,52 @@ class ManualImageCropEditorWindow {
 			}, 300);
 
 			function showPreview(coords) {
-				var rx = <?php echo $smallPreviewWidth; ?> / coords.w;
-				var ry = <?php echo $smallPreviewHeight; ?> / coords.h;
+				new_width = $('.dimensions-width').val();
+				new_height = $('.dimensions-height').val();
+				var smallPreviewWidth = <?php echo $smallPreviewWidth; ?>;
+				var smallPreviewHeight = <?php echo $smallPreviewHeight; ?>;
+				var aspect = smallPreviewWidth / smallPreviewHeight;
+				var previewWidth = <?php echo $previewWidth; ?>;
+				var previewHeight = <?php echo $previewHeight; ?>;
+
+				if (new_width !== smallPreviewWidth || new_height !== smallPrewviewHeight) {
+					 smallPreviewWidth = new_width;
+					 smallPreviewHeight = new_height;
+					 aspect = new_width / new_height;
+				}
+
+				// Calculate new viewbox size, constrained to 180px
+				smallPreviewWidth = Math.min(smallPreviewWidth, 180);
+				smallPreviewHeight = Math.min(smallPreviewHeight, 180);
+				if (smallPreviewWidth > smallPreviewHeight) {
+					smallPreviewHeight = smallPreviewWidth * (1 / aspect);
+				} else {
+					smallPreviewWidth = smallPreviewHeight * aspect;
+				}
+
+				// Calculate new margin for .preview-viewbox
+				if (smallPreviewWidth < 180) {
+					preview_margin = (180 - smallPreviewWidth) / 2;
+				} else {
+					preview_margin = 5;
+				}
+
+				$('.preview-viewbox').css({
+					width: smallPreviewWidth + 'px',
+					height: smallPreviewHeight + 'px',
+					marginLeft: preview_margin + 'px'
+				})
+
+				var rx = smallPreviewWidth / coords.w;
+				var ry = smallPreviewHeight / coords.h;
 
 				$('#preview').css({
-					width: Math.round(rx * <?php echo $previewWidth; ?>)+ 'px',
-					height: Math.round(ry * <?php echo $previewHeight; ?>) + 'px',
+					width: Math.round(rx * previewWidth )+ 'px',
+					height: Math.round(ry * previewHeight) + 'px',
 					marginLeft: '-' + Math.round(rx * coords.x) + 'px',
 					marginTop: '-' + Math.round(ry * coords.y) + 'px'
 				});
-				
+
 				var mic_2xok = Math.round(coords.w*mic_preview_scale) > (<?php echo $width; ?> * 2);
 				if(mic_2xok === true) {
 				  $('#mic-2x-status').toggleClass('mic-ok', mic_2xok).html("<?php _e('Compatible', 'microp') ?>");
