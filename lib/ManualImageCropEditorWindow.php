@@ -241,29 +241,31 @@ class ManualImageCropEditorWindow {
 			mic_attachment_id = <?php echo $postId; ?>;
 			mic_edited_size = '<?php echo $editedSize; ?>';
 			mic_preview_scale = <?php echo $previewRatio; ?>;
-			console.log(mic_preview_scale);
+			updated_dimensions = [false, 0, 0]  // [has_been_updated?, width, height]
+
 			$('#mic-make-2x').change(function() {$('#mic-2x-status').toggle()});
 
-			// On change of aspect ratio
+			// Monitor change to image dimension boxes.
 			$('.dimensions-width, .dimensions-height').change(function(){
 				new_width = $('.dimensions-width').val();
 				new_height = $('.dimensions-height').val();
 
-				// Update jcrop aspect ratio
+				updated_dimensions = [true, new_width, new_height];
+
+				// Update jcrop object on change of aspect ratio
 				$('#jcrop_target').Jcrop({
 					onChange: showPreview,
 					onSelect: showPreview,
-					aspectRatio: new_width / new_height,
+					aspectRatio: new_width / new_height
 				}, function() {
 					jcrop_api = this;
 				});
 
-				// Update preview box.
+				// Update preview viewbox.
 				$('#preview').css({
 					width: new_width + 'px',
 					height: new_height + 'px',
 				});
-
 			})
 
 			setTimeout(function() {
