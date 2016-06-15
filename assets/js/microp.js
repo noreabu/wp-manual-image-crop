@@ -1,5 +1,5 @@
 var jcrop_api, mic_attachment_id, mic_edited_size, mic_preview_scale;
-	
+
 jQuery(document).ready(function($) {
 	//image sizes tabs
 	$(document).on('click', '.rm-crop-size-tab', function(e) {
@@ -9,11 +9,20 @@ jQuery(document).ready(function($) {
 			$('#TB_ajaxContent').html(data);
 		});
 	});
-	
+
 	$( document ).on('click', '#micCropImage', function() {
 		$('#micCropImage').hide();
 		$('#micLoading').show();
-		$.post(ajaxurl + '?action=mic_crop_image', { select: jcrop_api.tellSelect(), scaled: jcrop_api.tellScaled(), attachmentId: mic_attachment_id, editedSize: mic_edited_size,  previewScale: mic_preview_scale, make2x: $('#mic-make-2x').prop('checked'), mic_quality: $('#micQuality').val() } ,  function(response) {
+		$.post(ajaxurl + '?action=mic_crop_image', {
+			select: jcrop_api.tellSelect(),
+			scaled: jcrop_api.tellScaled(),
+			attachmentId: mic_attachment_id,
+			editedSize: mic_edited_size,
+			previewScale: mic_preview_scale,
+			make2x: $('#mic-make-2x').prop('checked'),
+			mic_quality: $('#micQuality').val(),
+			updated_dimensions: updated_dimensions
+		} ,  function(response) {
 			if (response.status == 'ok') {
 				var newImage = new Image();
 				newImage.src = response.file + '?' + Math.random();
@@ -37,15 +46,15 @@ jQuery(document).ready(function($) {
 			}
 		}, 'json');
 	});
-	
+
 	 $('.mic-link').click( function() {
 		tb_position();
 	});
-	 
+
 	 $(document).on('click', '#TB_closeWindowButton, .TB_overlayBG', function(e) {
 		 $('#TB_overlay,#TB_window').remove();
 	 });
-	 
+
 	 function adjustMicWindowSize() {
 		 	if( ! $('#TB_ajaxContent .mic-editor-wrapper').length) {
 		 		return;
@@ -63,7 +72,7 @@ jQuery(document).ready(function($) {
 					tbWindow.css({'top': 20 + adminbar_height + 'px','margin-top':'0'});
 			};
 	 }
-	 
+
 	 setInterval(adjustMicWindowSize, 200);
 
 	// Prompt to crop featured images automatically, if set in settings page
