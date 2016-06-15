@@ -303,9 +303,12 @@ class ManualImageCropEditorWindow {
 				// Calculate new viewbox size, constrained to 180px
 				smallPreviewWidth = Math.min(smallPreviewWidth, 180);
 				smallPreviewHeight = Math.min(smallPreviewHeight, 180);
+
 				if (smallPreviewWidth > smallPreviewHeight) {
+					// Landscape Picture
 					smallPreviewHeight = smallPreviewWidth * (1 / aspect);
 				} else {
+					// Portrait Picture
 					smallPreviewWidth = smallPreviewHeight * aspect;
 				}
 
@@ -316,9 +319,25 @@ class ManualImageCropEditorWindow {
 					preview_margin = 5;
 				}
 
+				var viewboxWidth = smallPreviewWidth;
+				var viewboxHeight = smallPreviewHeight;
+
+				if (viewboxWidth > 180 || viewboxHeight > 180) {
+					if (viewboxWidth > viewboxHeight) {
+						//landscape
+						viewboxWidth = 180;
+						viewboxHeight = 180 * (1 / aspect);
+					} else {
+						//portrait
+						viewboxHeight = 180;
+						viewboxWidth = 180 * aspect;
+
+					}
+				}
+
 				$('.preview-viewbox').css({
-					width: smallPreviewWidth + 'px',
-					height: smallPreviewHeight + 'px',
+					width: viewboxWidth + 'px',
+					height: viewboxHeight + 'px',
 					marginLeft: preview_margin + 'px'
 				})
 
