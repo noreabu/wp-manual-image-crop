@@ -27,12 +27,25 @@ class ManualImageCropEditorWindow {
 		$sizesSettings = MicSettingsPage::getSettings();
 		?>
 <div class="mic-editor-wrapper">
+	<?php
+		global $_wp_additional_image_sizes;
+
+		// check if there are image definitions that allow cropping
+		$crop = false;
+		foreach($_wp_additional_image_sizes as $size) {
+			if ( $size["crop"] === true ) {
+				$crop = true;
+			}
+		}
+		if ( $crop === false ) : ?>
+			<h3><?php echo __('No available image size has "crop" enabled', 'microp'); ?></h3>
+			<p><?php echo __('Enable in a plugin/theme with either: add_image_size(x,y,<strong>true</strong>) or set_post_thumbnail_size(x,y,<strong>true</strong>)', 'microp'); ?></p>
+		<?php else : ?>
 	<h4>
 		<?php _e('Pick the image size:','microp'); ?>
 	</h4>
 	<h2 class="nav-tab-wrapper">
 		<?php
-		global $_wp_additional_image_sizes;
 
 		$imageSizes = get_intermediate_image_sizes();
 
@@ -93,17 +106,22 @@ class ManualImageCropEditorWindow {
 			$cropMethod = get_option($editedSize.'_crop');
 		}
 
-		$uploadsDir = wp_upload_dir();
+		if ( is_plugin_active('amazon-s3-and-cloudfront/wordpress-s3.php') ) {
+			add_filter( 'as3cf_get_attached_file_copy_back_to_local', 'ManualImageCrop::get_attached_file_copy_back_to_local', 10, 3 );
+
+			// function get_attached_file is called to trigger the hook above
+			get_attached_file($postId);
+		}
 
 		$metaData = wp_get_attachment_metadata($postId);
 
-		$src_file_url = wp_get_attachment_image_src($postId, 'full');
-		if (!$src_file_url) {
-			echo json_encode (array('status' => 'error', 'message' => 'wrong attachement' ) );
+		if (!$metaData) {
+			echo json_encode (array('status' => 'error', 'message' => 'could not get metadata for attachement(' . $postId . ') try reuploading the file' ) );
 			exit;
 		}
-		$src_file = str_replace($uploadsDir['baseurl'], $uploadsDir['basedir'], $src_file_url[0]);
-		$sizes = getimagesize($src_file);
+
+		$sizes[0] = $metaData["width"];
+		$sizes[1] = $metaData["height"];
 
 		$original[0] = $sizes[0];  // width
 		$original[1] = $sizes[1];  // height
@@ -202,24 +220,19 @@ class ManualImageCropEditorWindow {
 
 
 		<?php
-		$ext = strtolower( pathinfo($src_file, PATHINFO_EXTENSION) );
+		$ext = strtolower( pathinfo($metaData["file"], PATHINFO_EXTENSION) );
 		if ($ext == 'jpg' || $ext == 'jpeg') {
-			echo '<div class="mic-option"><label for="micQuality">' . __('Target JPEG Quality', 'microp') . '</label> <select id="micQuality" name="mic_quality">
-			<option value="100">' . __('100 (best quality, biggest file)', 'microp') . '</option>
-			<option value="80" ' . ( $sizesSettings[$editedSize]['quality'] == '80' ? 'selected' : '' ) . '>' . __('80 (very high quality)', 'microp') . '</option>
-			<option value="70" ' . ( $sizesSettings[$editedSize]['quality'] == '70' ? 'selected' : '' ) . '>' . __('70 (high quality)', 'microp') . '</option>
-			<option value="60" ' . ( $sizesSettings[$editedSize]['quality'] == '60' ? 'selected' : '' ) . '>' . __('60 (good)', 'microp') . '</option>
-			<option value="50" ' . ( $sizesSettings[$editedSize]['quality'] == '50' ? 'selected' : '' ) . '>' . __('50 (average)', 'microp') . '</option>
-			<option value="30" ' . ( $sizesSettings[$editedSize]['quality'] == '30' ? 'selected' : '' ) . '>' . __('30 (low)', 'microp') . '</option>
-			<option value="10" ' . ( $sizesSettings[$editedSize]['quality'] == '10' ? 'selected' : '' ) . '>' . __('10 (very low, smallest file)', 'microp') . '</option>
-			</select></div>';
+			echo '<div class="mic-option">';
+				echo '<label for="micQuality">' . __('Target JPEG Quality', 'microp') . ':</label> ';
+				echo '<input type="number" pattern="[0-9\.]+" min="0" max="100" step="1" id="micQuality" class="micQuality" name="mic_quality" value="'. esc_attr( $sizesSettings[$editedSize]['quality'] ) .'"> %';
+			echo '</div>';
 		}
 		?>
 		<?php
                 if ( is_plugin_active('wp-retina-2x/wp-retina-2x.php') ) { ?>
 		<div class="mic-option">
 			<input type="checkbox" id="mic-make-2x"
-			<?php if(get_option('mic_make2x') === 'true' ) echo 'checked="checked"' ?> />
+			<?php if(get_option('mic_make2x')) echo 'checked="checked"' ?> />
 			<label for="mic-make-2x"><?php _e('Generate Retina/HiDPI (@2x):', 'microp') ?>
 				<span id="mic-2x-status"></span> </label>
 		</div>
@@ -350,6 +363,6 @@ class ManualImageCropEditorWindow {
 			}
 		});
 		</script>
-<?php
+<?php endif; // condition: crop enabled for at least one image size
 	}
 }

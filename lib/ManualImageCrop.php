@@ -29,7 +29,7 @@ class ManualImageCrop {
 	public function enqueueAssets() {
 		add_thickbox();
 
-		wp_register_style( 'rct-admin', plugins_url('assets/css/mic-admin.css', dirname( __FILE__ ) ) );
+		wp_register_style( 'rct-admin', plugins_url('assets/css/mic-admin.css', dirname( __FILE__ ) ), array(), mic_VERSION );
 		wp_enqueue_style( 'rct-admin' );
 
 		wp_register_style( 'jquery-jcrop', plugins_url('assets/css/jquery.Jcrop.min.css', dirname( __FILE__ ) ) );
@@ -37,7 +37,7 @@ class ManualImageCrop {
 
 		wp_enqueue_script( 'jquery-color', plugins_url('assets/js/jquery.color.js', dirname( __FILE__ )), array( 'jquery') );
 		wp_enqueue_script( 'jquery-jcrop', plugins_url('assets/js/jquery.Jcrop.min.js', dirname( __FILE__ )), array( 'jquery') );
-		wp_enqueue_script( 'miccrop', plugins_url('assets/js/microp.js', dirname( __FILE__ )), array( 'jquery') );
+		wp_enqueue_script( 'miccrop', plugins_url('assets/js/microp.js', dirname( __FILE__ )), array( 'jquery'), mic_VERSION );
 	}
 
 	/**
@@ -86,14 +86,19 @@ class ManualImageCrop {
 		var micEditAttachemtnLinkAddedInterval = 0;
 		jQuery(document).ready(function() {
 			micEditAttachemtnLinkAddedInterval = setInterval(function() {
-				if (jQuery('.details .edit-attachment').length) {
-					try {
-						var mRegexp = /\?post=([0-9]+)/;
-						var match = mRegexp.exec(jQuery('.details .edit-attachment').attr('href'));
-						jQuery('.crop-image-ml.crop-image').remove();
-						jQuery('.details .edit-attachment').after( '<a class="thickbox mic-link crop-image-ml crop-image" rel="crop" title="<?php _e("Manual Image Crop","microp"); ?>" href="' + ajaxurl + '?action=mic_editor_window&postId=' + match[1] + '"><?php _e('Crop Image','microp') ?></a>' );
-					} catch (e) {
-						console.log(e);
+				var $mediaEditLink = jQuery('.details .edit-attachment');
+
+				if ($mediaEditLink.length) {
+					// Check if we already have the "Crop Image" link before adding a new one
+					if ( $mediaEditLink.siblings('.crop-image-ml.crop-image').length == 0 ) {
+						try {
+							var mRegexp = /\?post=([0-9]+)/;
+							var match = mRegexp.exec($mediaEditLink.attr('href'));
+							jQuery('.crop-image-ml.crop-image').remove();
+							$mediaEditLink.after( '<a class="thickbox mic-link crop-image-ml crop-image" rel="crop" title="<?php _e("Manual Image Crop","microp"); ?>" href="' + ajaxurl + '?action=mic_editor_window&postId=' + match[1] + '"><?php _e('Crop Image','microp') ?></a>' );
+						} catch (e) {
+							console.log(e);
+						}
 					}
 				}
 
@@ -122,8 +127,10 @@ class ManualImageCrop {
 		var micEditAttachemtnLinkAddedInterval = 0;
 		jQuery(document).ready(function() {
 			micEditAttachemtnLinkAddedInterval = setInterval(function() {
-				if (jQuery('#media-items .edit-attachment').length) {
-					jQuery('#media-items .edit-attachment').each(function(i, k) {
+				var $editAttachment = jQuery('#media-items').find('.edit-attachment');
+
+				if ($editAttachment.length) {
+					$editAttachment.each(function(i, k) {
 						try {
 							var mRegexp = /\?post=([0-9]+)/;
 							var match = mRegexp.exec(jQuery(this).attr('href'));
@@ -170,18 +177,49 @@ class ManualImageCrop {
 	}
 
 	/**
-	 * Crops the image based on params passed in $_POST array
+	 * Callback function for plugin: amazon-s3-and-cloudfront
 	 */
-	public function cropImage() {
+	function get_attached_file_copy_back_to_local( $copy_back_to_local, $file, $attachment_id ) {
+		if ( !file_exists($file)) {
+			return true; // we want the image on the server
+		} else {
+			return false;
+		}
+	}
+
+	/**
+	 * Crops the image based on params passed in $_POST array
+	 *
+	 * Optional parameter $data can be used by plugins to call this method using previous configurations.
+	 *
+	 * @param null $data
+	 */
+	public function cropImage( $data = null, $silent_result = false ) {
 		global $_wp_additional_image_sizes;
 
-		$data = $this->filterPostData();
+		if ( $data === null ) {
+			$data = $this->filterPostData();
+		}
+
+		$imageMetadata = wp_get_attachment_metadata($data['attachmentId']);
+
+		if ( is_plugin_active('amazon-s3-and-cloudfront/wordpress-s3.php') ) {
+			add_filter( 'as3cf_get_attached_file_copy_back_to_local', array( $this, 'get_attached_file_copy_back_to_local' ), 10, 3 );
+
+			// This funciton is called to trigger the hook above
+			get_attached_file($data['attachmentId']);
+		}
 
 		$dst_file_url = wp_get_attachment_image_src($data['attachmentId'], $data['editedSize']);
 
 		if (!$dst_file_url) {
-			exit;
+			if ( $silent_result ) return;
+			else exit;
 		}
+
+		update_post_meta( $data['attachmentId'], '_mic_resizesize-' . $data['editedSize'], $data );
+
+		$quality = $data['mic_quality'];
 
 		$uploadsDir = wp_upload_dir();
 
@@ -199,8 +237,12 @@ class ManualImageCrop {
 			$src_file_url = wp_get_attachment_image_src( $data['attachmentId'], 'full' );
 
 			if ( ! $src_file_url ) {
-				echo json_encode( array( 'status' => 'error', 'message' => 'wrong attachment' ) );
-				exit;
+				if ( $silent_result ) {
+					return;
+				}else{
+					echo json_encode( array( 'status' => 'error', 'message' => 'wrong attachment' ) );
+					exit;
+				}
 			}
 
 			$src_file = str_replace( $uploadsDir['baseurl'], $uploadsDir['basedir'], $src_file_url[0] );
@@ -243,8 +285,12 @@ class ManualImageCrop {
 		}
 
 		if (!$dst_w || !$dst_h) {
-			echo json_encode (array('status' => 'error', 'message' => 'wrong dimensions' ) );
-			exit;
+			if ( $silent_result) {
+				return;
+			}else{
+				echo json_encode (array('status' => 'error', 'message' => 'wrong dimensions' ) );
+				exit;
+			}
 		}
 
 		//prepares coordinates that will be passed to cropping function
@@ -274,7 +320,6 @@ class ManualImageCrop {
 		}
 
 		//saves the selected area
-		$imageMetadata = wp_get_attachment_metadata($data['attachmentId']);
 		$imageMetadata['micSelectedArea'][$data['editedSize']] = array(
 				'x' => $data['select']['x'],
 				'y' => $data['select']['y'],
@@ -285,6 +330,12 @@ class ManualImageCrop {
 		wp_update_attachment_metadata($data['attachmentId'], $imageMetadata);
 
 		if ( function_exists('wp_get_image_editor') ) {
+
+			// get local file - possible improvement: change hooks, so one call is enough
+			if ( is_plugin_active('amazon-s3-and-cloudfront/wordpress-s3.php') ) {
+				$src_file = get_attached_file($data['attachmentId']);
+			}
+
 			$img = wp_get_image_editor( $src_file );
 
 			if ( ! is_wp_error( $img ) ) {
@@ -294,12 +345,20 @@ class ManualImageCrop {
 				$saveStatus = $img->save( $dst_file );
 
 				if ( is_wp_error( $saveStatus ) ) {
-					echo json_encode( array( 'status' => 'error', 'message' => 'WP_ERROR: ' . $saveStatus->get_error_message() ) );
-					exit;
+					if ( $silent_result ) {
+						return;
+					}else{
+						echo json_encode( array( 'status' => 'error', 'message' => 'WP_ERROR: ' . $saveStatus->get_error_message() ) );
+						exit;
+					}
 				}
 			}else {
-				echo json_encode (array('status' => 'error', 'message' => 'WP_ERROR: ' . $img->get_error_message() ) );
-				exit;
+				if ( $silent_result ) {
+					return;
+				}else{
+					echo json_encode (array('status' => 'error', 'message' => 'WP_ERROR: ' . $img->get_error_message() ) );
+					exit;
+				}
 			}
 		} else {
 			//determines what's the image format
@@ -313,16 +372,24 @@ class ManualImageCrop {
 			}
 
 			if ($src_img === false ) {
-				echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: Cannot create image from the source file' ) );
-				exit;
+				if ( $silent_result ) {
+					return;
+				}else{
+					echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: Cannot create image from the source file' ) );
+					exit;
+				}
 			}
 
 			$dst_img = imagecreatetruecolor($dst_w, $dst_h);
 			$resampleReturn  = imagecopyresampled($dst_img, $src_img, $dst_x, $dst_y, $src_x, $src_y, $dst_w, $dst_h, $src_w, $src_h);
 
 			if ($resampleReturn === false ) {
-				echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: imagecopyresampled' ) );
-				exit;
+				if ( $silent_result ) {
+					return;
+				}else{
+					echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: imagecopyresampled' ) );
+					exit;
+				}
 			}
 
 			$imageSaveReturn = true;
@@ -335,13 +402,17 @@ class ManualImageCrop {
 			}
 
 			if ($imageSaveReturn === false ) {
-				echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: imagejpeg/imagegif/imagepng' ) );
-				exit;
+				if ( $silent_result ) {
+					return;
+				}else{
+					echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: imagejpeg/imagegif/imagepng' ) );
+					exit;
+				}
 			}
 		}
 
 		// Generate Retina Image
-		if( isset( $data['make2x'] ) && $data['make2x'] === 'true' ) {
+		if( isset( $data['make2x'] ) && $data['make2x'] === true ) {
 			$dst_w2x = $dst_w * 2;
 			$dst_h2x = $dst_h * 2;
 
@@ -357,16 +428,24 @@ class ManualImageCrop {
 						$img->set_quality( $quality );
 						$img->save($dst_file2x);
 					}else {
-						echo json_encode (array('status' => 'error', 'message' => 'WP_ERROR: ' . $img->get_error_message() ) );
-						exit;
+						if ( $silent_result ) {
+							return;
+						}else{
+							echo json_encode (array('status' => 'error', 'message' => 'WP_ERROR: ' . $img->get_error_message() ) );
+							exit;
+						}
 					}
 				} else {
 					$dst_img2x = imagecreatetruecolor($dst_w2x, $dst_h2x);
 					$resampleReturn = imagecopyresampled($dst_img2x, $src_img, $dst_x, $dst_y, $src_x, $src_y, $dst_w2x, $dst_h2x, $src_w, $src_h);
 
 					if ($resampleReturn === false ) {
-						echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: imagecopyresampled' ) );
-						exit;
+						if ( $silent_result ) {
+							return;
+						}else{
+							echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: imagecopyresampled' ) );
+							exit;
+						}
 					}
 
 					$imageSaveReturn = true;
@@ -379,8 +458,12 @@ class ManualImageCrop {
 					}
 
 					if ($imageSaveReturn === false ) {
-						echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: imagejpeg/imagegif/imagepng' ) );
-						exit;
+						if ( $silent_result ) {
+							return;
+						}else{
+							echo json_encode (array('status' => 'error', 'message' => 'PHP ERROR: imagejpeg/imagegif/imagepng' ) );
+							exit;
+						}
 					}
 				}
 			}
@@ -390,8 +473,17 @@ class ManualImageCrop {
 			update_option('mic_make2x', $data['make2x']);
 		}
 
+		// trigger s3 sync
+		if ( is_plugin_active('amazon-s3-and-cloudfront/wordpress-s3.php') ) {
+			wp_update_attachment_metadata($data['attachmentId'], $imageMetadata);
+		}
+
 		//returns the url to the generated image (to allow refreshing the preview)
-		echo json_encode (array('status' => 'ok', 'file' => $dst_file_url[0] ) );
-		exit;
+		if ( $silent_result ) {
+			return;
+		}else{
+			echo json_encode (array('status' => 'ok', 'file' => $dst_file_url[0] ) );
+			exit;
+		}
 	}
 }
