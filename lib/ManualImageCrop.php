@@ -143,7 +143,6 @@ class ManualImageCrop {
 
 	private function filterPostData() {
 		$imageSizes = get_intermediate_image_sizes();
-		error_log(json_encode($_POST));
 		$data = array(
 				'attachmentId' => filter_var($_POST['attachmentId'], FILTER_SANITIZE_NUMBER_INT),
 				'editedSize' => in_array($_POST['editedSize'], $imageSizes) ? $_POST['editedSize'] : null,
@@ -234,7 +233,6 @@ class ManualImageCrop {
 			if ($data['updatedDimensions'][0]) {
 				$dst_w = min(intval($data['updatedDimensions'][1]), $data['select']['w'] * $data['previewScale']);
 				$dst_h = min(intval($data['updatedDimensions'][2]), $data['select']['h'] * $data['previewScale']);
-				error_log("dst_w: $dst_w, dst_h: $dst_h");
 			} else {
 				$dst_w = min(intval($_wp_additional_image_sizes[$data['editedSize']]['width']), $data['select']['w'] * $data['previewScale']);
 				$dst_h = min(intval($_wp_additional_image_sizes[$data['editedSize']]['height']), $data['select']['h'] * $data['previewScale']);
