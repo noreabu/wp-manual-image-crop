@@ -84,6 +84,18 @@ class ManualImageCrop {
 <script>
 		var micEditAttachemtnLinkAdded = false;
 		var micEditAttachemtnLinkAddedInterval = 0;
+<<<<<<< HEAD
+		jQuery(document).ready(function() {
+			micEditAttachemtnLinkAddedInterval = setInterval(function() {
+				if (jQuery('.details .edit-attachment').length) {
+					try {
+						var mRegexp = /\?post=([0-9]+)/;
+						var match = mRegexp.exec(jQuery('.details .edit-attachment').attr('href'));
+						jQuery('.crop-image-ml.crop-image').remove();
+						jQuery('.details .edit-attachment').after( '<a class="thickbox mic-link crop-image-ml crop-image" rel="crop" title="<?php _e("Manual Image Crop","microp"); ?>" href="' + ajaxurl + '?action=mic_editor_window&postId=' + match[1] + '"><?php _e('Crop Image','microp') ?></a>' );
+					} catch (e) {
+						console.log(e);
+=======
 
 		jQuery(document).ready(function() {
 			micEditAttachemtnLinkAddedInterval = setInterval(function() {
@@ -100,6 +112,7 @@ class ManualImageCrop {
 						} catch (e) {
 							console.log(e);
 						}
+>>>>>>> wip
 					}
 				}
 
@@ -133,7 +146,7 @@ class ManualImageCrop {
 				if ($editAttachment.length) {
 					$editAttachment.each(function(i, k) {
 						try {
-							var mRegexp = /\?post=([0-9]+)/; 
+							var mRegexp = /\?post=([0-9]+)/;
 							var match = mRegexp.exec(jQuery(this).attr('href'));
 							if (!jQuery(this).parent().find('.edit-attachment.crop-image').length && jQuery(this).parent().find('.pinkynail').attr('src').match(/upload/g)) {
 								jQuery(this).after( '<a class="thickbox mic-link edit-attachment crop-image" rel="crop" title="<?php _e("Manual Image Crop","microp"); ?>" href="' + ajaxurl + '?action=mic_editor_window&postId=' + match[1] + '"><?php _e('Crop Image','microp') ?></a>' );
@@ -148,12 +161,12 @@ class ManualImageCrop {
 	</script>
 <?php
 	}
-	
+
 	private function filterPostData() {
 		$imageSizes = get_intermediate_image_sizes();
-	
+		error_log(json_encode($_POST));
 		$data = array(
-				'attachmentId' => filter_var($_POST['attachmentId'], FILTER_SANITIZE_NUMBER_INT),			
+				'attachmentId' => filter_var($_POST['attachmentId'], FILTER_SANITIZE_NUMBER_INT),
 				'editedSize' => in_array($_POST['editedSize'], $imageSizes) ? $_POST['editedSize'] : null,
 				'select' => array(
 							'x' => filter_var($_POST['select']['x'], FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION),
@@ -161,8 +174,8 @@ class ManualImageCrop {
 							'w' => filter_var($_POST['select']['w'], FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION),
 							'h' => filter_var($_POST['select']['h'], FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION),
 						),
-				'previewScale' => filter_var($_POST['previewScale'], FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION)
-				
+				'previewScale' => filter_var($_POST['previewScale'], FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION),
+				'updatedDimensions' => $_POST['updated_dimensions']
 		);
 
 		if (isset($_POST['mic_quality'])) {
@@ -191,7 +204,7 @@ class ManualImageCrop {
 
 	/**
 	 * Crops the image based on params passed in $_POST array
-	 * 
+	 *
 	 * Optional parameter $data can be used by plugins to call this method using previous configurations.
 	 *
 	 * @param null $data
@@ -207,7 +220,7 @@ class ManualImageCrop {
 
 		if ( is_plugin_active('amazon-s3-and-cloudfront/wordpress-s3.php') ) {
 			add_filter( 'as3cf_get_attached_file_copy_back_to_local', array( $this, 'get_attached_file_copy_back_to_local' ), 10, 3 );
-			
+
 			// This funciton is called to trigger the hook above
 			get_attached_file($data['attachmentId']);
 		}
@@ -254,16 +267,16 @@ class ManualImageCrop {
 		//checks if the destination image file is present (if it's not, we want to create a new file, as the WordPress returns the original image instead of specific one)
 		if ($dst_file == $src_file) {
 			$attachmentData = wp_generate_attachment_metadata( $data['attachmentId'], $dst_file );
-				
+
 			//overwrite with previous values
 			$prevAttachmentData = wp_get_attachment_metadata($data['attachmentId']);
 			if (isset($prevAttachmentData['micSelectedArea'])) {
 				$attachmentData['micSelectedArea'] = $prevAttachmentData['micSelectedArea'];
 			}
-				
+
 			//saves new path to the image size in the database
 			wp_update_attachment_metadata( $data['attachmentId'],  $attachmentData );
-				
+
 			//new destination file path - replaces original file name with the correct one
 			$dst_file = str_replace( basename($attachmentData['file']), $attachmentData['sizes'][ $data['editedSize'] ]['file'], $dst_file);
 
@@ -272,9 +285,16 @@ class ManualImageCrop {
 		}
 
 		//sets the destination image dimensions
+
 		if (isset($_wp_additional_image_sizes[$data['editedSize']])) {
-			$dst_w = min(intval($_wp_additional_image_sizes[$data['editedSize']]['width']), $data['select']['w'] * $data['previewScale']);
-			$dst_h = min(intval($_wp_additional_image_sizes[$data['editedSize']]['height']), $data['select']['h'] * $data['previewScale']);
+			if ($data['updatedDimensions'][0]) {
+				$dst_w = min(intval($data['updatedDimensions'][1]), $data['select']['w'] * $data['previewScale']);
+				$dst_h = min(intval($data['updatedDimensions'][2]), $data['select']['h'] * $data['previewScale']);
+				error_log("dst_w: $dst_w, dst_h: $dst_h");
+			} else {
+				$dst_w = min(intval($_wp_additional_image_sizes[$data['editedSize']]['width']), $data['select']['w'] * $data['previewScale']);
+				$dst_h = min(intval($_wp_additional_image_sizes[$data['editedSize']]['height']), $data['select']['h'] * $data['previewScale']);
+			}
 		} else {
 			$dst_w = min(get_option($data['editedSize'].'_size_w'), $data['select']['w'] * $data['previewScale']);
 			$dst_h = min(get_option($data['editedSize'].'_size_h'), $data['select']['h'] * $data['previewScale']);
@@ -452,7 +472,7 @@ class ManualImageCrop {
 					} else {
 						$imageSaveReturn = imagejpeg($dst_img2x, $dst_file2x, $quality);
 					}
-						
+
 					if ($imageSaveReturn === false ) {
 						if ( $silent_result ) {
 							return;
